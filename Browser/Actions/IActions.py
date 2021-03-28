@@ -113,8 +113,11 @@ class IActions:
             finally:
                 if exists(file_path):
                     print(f"[Wrote file]: {file_name} to {file_path}")
+                    self._bot.downloads[file_name] = file_path
+                    print(self._bot.downloads)
                 else:
                     print(f"[Failed to write file]: {file_name} to {file_path}")
+
                 return file_path
 
     def _getExtensionPrefix(self, extracted = False):

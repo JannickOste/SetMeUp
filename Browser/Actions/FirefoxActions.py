@@ -24,14 +24,15 @@ class FirefoxActions(IActions, ABC):
             self.goto(addon_uri)
             self.download(self._bot.driver.find_element(By.LINK_TEXT, "Add to Firefox").get_attribute("href"))
 
-    def installAddons(self, on_bot: bool = False):
+    def installAddons(self, on_bot: bool = False, addon_paths: list = None):
         download_path = self._bot.getConfig("download_path")
         downloads = listdir(download_path)
 
         if not on_bot:
             self._bot.release()
 
-        for file in [file for file in downloads if file.lower().endswith(self._getExtensionPrefix(True))]:
+        addon_paths = addon_paths if addon_paths is not None else [file for file in downloads if file.lower().endswith(self._getExtensionPrefix(True))]
+        for file in addon_paths:
             extension_path = join(download_path, file)
 
             Shell.run(self._bot.getConfig("executable_path"), f'"{extension_path}"')

@@ -34,12 +34,20 @@ class BrowserBot:
             "edge": selenium.webdriver.Edge,
             "iexplore": selenium.webdriver.Ie
         }
+    __downloads: dict = {}
+
+    @property
+    def downloads(self):
+        return self.__downloads
+
+    @downloads.setter
+    def downloads(self, val):
+        self.__downloads = dict(**self.__downloads, **val)
 
     def __init__(self, browser_exec: str):
         assert browser_exec is None or os.path.exists(browser_exec)
 
         driver_name = browser_exec.split("\\")[-1]
-
         self.__driver_conf = {
             "selenium_driver": self.__browser_drivers.get(driver_name),
             "binary": browser_exec,
