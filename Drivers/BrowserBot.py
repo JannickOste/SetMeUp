@@ -1,47 +1,57 @@
-from datetime import datetime
+import shutil, zipfile
+import subprocess
 from os import listdir
 from os.path import join
-from platform import platform
 from time import sleep
 
-import pyautogui as pyautogui
-from selenium.webdriver import DesiredCapabilities, FirefoxProfile
-import selenium
+import cv2
+import numpy
+import pyautogui
 from PIL import Image
+from selenium.webdriver import DesiredCapabilities
+import selenium
 import os
-import asyncio, requests
+import requests
 
 from selenium.webdriver.common.by import By
 
 from Classes.Configuration import Configuration
+from Classes.Shell import Shell
 
 
 class BrowserBot:
     __browser_drivers = \
         {
-            "firefox.exe": selenium.webdriver.Firefox,
-            "chrome.exe": selenium.webdriver.Chrome,
-            "edge.exe": selenium.webdriver.Edge,
-            "iexplore.exe": selenium.webdriver.Ie
+            "firefox": selenium.webdriver.Firefox,
+            "chrome": selenium.webdriver.Chrome,
+            "edge": selenium.webdriver.Edge,
+            "iexplore": selenium.webdriver.Ie
         }
 
     __binary_path = None
 
     __target_driver: selenium.webdriver = None
-    __driver_name: str = None
+    __driver_conf: dict = {}
 
     def __init__(self, browser_exec: str):
         assert browser_exec is None or os.path.exists(browser_exec)
 
         self.__binary_path = browser_exec
-        self.__driver_name = browser_exec.split("\\")[-1].lower()
-        driver = self.__browser_drivers.get(self.__driver_name)
-        driver_kwargs = {
-            "stripped_name": self.__driver_name.split(".")[0],
-            "executable_path": Configuration.getDriverPath(driver_name=self.__driver_name.split(".")[0])
+
+        driver_name = browser_exec.split("\\")[-1]
+        self.__driver_conf = {
+            "selenium_driver": self.__browser_drivers.get(driver_name),
+            "binary": browser_exec,
+            "executable_name": driver_name.split(".")[0],
+            "executable_file": driver_name,
+            "executable_path": Configuration.getDriverPath(driver_name=driver_name.split(".")[0])
         }
-        self.__target_driver = driver(executable_path=driver_kwargs["executable_path"], **self.__getProfile(driver))
+
+    def start(self):
+        driver = self.__browser_drivers.get(self.__driver_conf.get("executable_name"))
+        self.__target_driver = driver(**self.__getProfile(driver), executable_path=self.__driver_conf["executable_path"])
         self.__target_driver.maximize_window()
+
 
     def __getProfile(self, driver: selenium.webdriver):
         """
@@ -59,76 +69,69 @@ class BrowserBot:
         elif isinstance(driver, selenium.webdriver.Chrome):
             profile = {"chrome_options" : selenium.webdriver.ChromeOptions()}
             profile["chrome_options"].add_experimental_option("prefs", {
-              "download.default_directory": Configuration.getBrowserConfiguration("download_path"),
-              "download.prompt_for_download": False,
-              "download.directory_upgrade": True,
-              "safebrowsing.enabled": True
+                "safebrowsing.enabled": True,
+                "profile.default_content_settings.popups": 0,
+                "download.prompt_for_download": False,
+                "download.directory_upgrade": True,
+                "download.default_directory": Configuration.getBrowserConfiguration("download_path")
             })
         elif isinstance(driver, selenium.webdriver.Ie):
             profile =  {"ie_options" : selenium.webdriver.IeOptions()}
 
         return profile
 
-
     def __getCapabilities(self, driver: selenium.webdriver):
         capabilities = DesiredCapabilities()
         if isinstance(driver, selenium.webdriver.Firefox):
-            return capabilities.FIREFOX.copy()
+            capabilities = capabilities.FIREFOX.copy()
         elif isinstance(driver, selenium.webdriver.Chrome):
-            return capabilities.CHROME.copy()
+            capabilities = capabilities.CHROME.copy()
         elif isinstance(driver, selenium.webdriver.Ie):
-            return capabilities.INTERNETEXPLORER.copy()
+            capabilities = capabilities.INTERNETEXPLORER.copy()
         elif isinstance(driver, selenium.webdriver.Edge):
-            return capabilities.EDGE.copy()
+            capabilities = capabilities.EDGE.copy()
 
-    def __getExtensionPrefix(self) -> str:
-        driver_name = self.__driver_name.split(".")[0]
+        return capabilities
+
+    def __getExtensionPrefix(self, extracted: bool = False) -> str:
+        driver_name = self.__driver_conf.get("executable_name")
+
         if driver_name == "chrome":
-            return "crx"
+            return "zip" if extracted else "crx"
         elif driver_name == "firefox":
-            return "ipx"
+            return "xpi"
         else:
             raise Exception("Browser not supported")
 
     def goto(self, uri):
         self.__target_driver.get(uri)
 
-    def searchImage(self, image_path: str, click: bool = False, timeout: float = 0):
-        start = datetime.now()
+    def downloadAddons(self, addon_uris: list) -> None:
 
-        # Weird issues with cv2 matchtemplates, gotta look into this due cv2 being faster.
-        while True:
-            if timeout != 0 and 0 < (datetime.now() - start).seconds < timeout:
-                return None
+        driver_name = self.__driver_conf.get("executable_name")
+        for addon_uri in addon_uris:
+            web: bool = any([addon_uri.startswith(prefix) for prefix in ["http", "https", "www"]])
 
-            loc = pyautogui.locateOnScreen(Image.open(image_path), confidence=0.6)
-            if loc is not None:
-                if click:
-                    pyautogui.click(loc.left, loc.top, 2, 0.1)
+            if not web:
+                continue
 
-                return loc
-
-    def getAddonFileURI(self, addon_uri: str) -> str:
-        web: bool = any([addon_uri.startswith(prefix) for prefix in ["http", "https", "www"]])
-
-        if not web:
-            if os.path.exists(addon_uri):
-                self.__target_driver.install_addon(addon_uri)
-            else:
-                raise Exception("Invalid extension filepath")
-        else:
-            if self.__driver_name == "firefox.exe":
+            uri = None
+            if driver_name == "firefox":
                 self.goto(addon_uri)
-                return self.__target_driver.find_element(By.LINK_TEXT, "Add to Firefox").get_attribute("href")
-            elif self.__driver_name == "chrome.exe":
+                self.__download(self.__target_driver.find_element(By.LINK_TEXT, "Add to Firefox").get_attribute("href"))
+            elif driver_name == "chrome":
+                # Download CRX
                 self.goto("https://crxextractor.com/")
                 self.__target_driver.find_element(By.CLASS_NAME, "button-primary").click()
+
                 sleep(1)
+
                 self.__target_driver.find_element(By.CSS_SELECTOR, "#crx-download-input").send_keys(addon_uri)
                 self.__target_driver.find_element(By.CSS_SELECTOR, ".download-crx-ok").click()
-                return self.__target_driver.find_element(By.CSS_SELECTOR, ".download-crx").get_attribute("href")
+                addon_uri = self.__target_driver.find_element(By.CSS_SELECTOR, ".download-crx").get_attribute("href")
+                self.__convertChromeExtension(self.__download(addon_uri))
 
-    def downloadFile(self, uri: str):
+    def __download(self, uri: str) -> str:
         request = requests.get(uri, allow_redirects=True)
         if request.status_code == 200:
             file_name = uri.split('/')[-1]
@@ -139,29 +142,79 @@ class BrowserBot:
             except OSError:
                 extension = self.__getExtensionPrefix()
                 file_name = f"{len(listdir(Configuration.getBrowserConfiguration('download_path')))}.{extension}"
+                file_path = join(Configuration.getBrowserConfiguration("download_path"), file_name)
 
-                open(join(Configuration.getBrowserConfiguration("download_path"), file_name), "wb").write(request.content)
+                open(file_path, "wb").write(request.content)
+            finally:
+                if os.path.exists(file_path):
+                    print(f"[Wrote file]: {file_name} to {file_path}")
+                else:
+                    print(f"[Failed to write file]: {file_name} to {file_path}")
+                return file_path
 
-            print(f"[Wrote file]: {file_name} to {file_path}")
+    def installAddons(self, on_bot: bool = False):
+        driver_name = self.__driver_conf.get("executable_name")
+        download_path = Configuration.getBrowserConfiguration("download_path")
+        downloads = listdir(download_path)
 
-    def installAddonsOnMainExecutable(self):
-        driver_name = self.__driver_name.split(".")[0]
-        for file in [file for file in listdir(Configuration.getBrowserConfiguration("download_path")) if file.lower().endswith(self.__getExtensionPrefix())]:
-            print(file)
+        if not on_bot:
+            self.release()
+
+        for file in [file for file in downloads if file.lower().endswith(self.__getExtensionPrefix(True))]:
             extension_path = os.path.join(Configuration.getBrowserConfiguration("download_path"), file)
+
             if driver_name == "firefox":
-                os.system(f'start "{self.__binary_path}" "{extension_path}"')
+                Shell.run(self.__binary_path, f'"{extension_path}"')
+                sleep(2)
+                for i in range(0, 4):
+                    loc = (0, 0)
+                    attempts = 0
+                    while loc == (0, 0) and attempts < 5:
+                        loc = self.__locateBoxOnScreen(rgb_color=(0, 96, 223), min_area=(175, 30))
+                        attempts+= 1
+                    if loc != (0, 0):
+                        pyautogui.click(loc[0], loc[1])
             elif driver_name == "chrome":
-                self.goto("https://crxextractor.com/")
+                file_name = extension_path.replace("\\", "/").split("/")[-1].split(".")[0]
+                extract_path = os.path.join(download_path, file_name)
+                if not os.path.exists(extract_path):
+                    with zipfile.ZipFile(extension_path, "r") as zip_obj:
+                        zip_obj.extractall(extract_path)
 
-                self.__target_driver.find_element(By.CLASS_NAME, "button-primary").click()
-                sleep(1)
-                print(self.__target_driver.find_element(By.ID, "file").send_keys(extension_path))
-                sleep(1)
-                print(self.__target_driver.find_element(By.CLASS_NAME, "download").click())
+                subprocess.call([self.__binary_path, f'--load-extension="{extract_path}"'])
 
-            if platform == "win32":
-                os.system(f"taskkill -f -im {self.__driver_name}")
+        if self.__target_driver is not None:
+            self.start()
+
+    def __locateBoxOnScreen(self, rgb_color, min_area):
+        search_box = numpy.asarray(Image.new("RGB", min_area, color=rgb_color))
+        desktop_image = numpy.asarray(pyautogui.screenshot())
+
+        result = cv2.matchTemplate(desktop_image, search_box, cv2.TM_SQDIFF_NORMED)
+
+        return cv2.minMaxLoc(result)[2]
+
+
+    def __convertChromeExtension(self, file_path):
+        self.goto("https://crxextractor.com/")
+        self.__target_driver.find_element(By.CLASS_NAME, "button-primary").click()
+        sleep(1)
+        self.__target_driver.find_element(By.ID, "file").send_keys(file_path)
+        sleep(1)
+        # cannot get href -> blob (browser specific data)
+        self.__target_driver.find_element(By.CLASS_NAME, "download").click()
+
+        # Temporary fix for chrome not setting download directory correctly
+        # TODO: look into^
+        file_name = file_path.replace("\\", "/").split("/")[-1].split('.')[0]
+        while not os.path.exists(os.path.join(os.environ['USERPROFILE'], "Downloads", f"{file_name}.zip")):
+            sleep(0.1)
+
+        shutil.move(os.path.join(os.environ['USERPROFILE'], "Downloads", f"{file_name}.zip"),
+                    os.path.join(Configuration.getBrowserConfiguration("download_path"), f"{file_name}.zip"))
+
+        os.remove(file_path)
 
     def release(self):
-        self.__target_driver.quit()
+        if self.__target_driver is not None:
+            self.__target_driver.quit()
