@@ -1,8 +1,10 @@
 from os.path import exists
 from sys import platform
+from time import sleep
 
 from selenium import webdriver
 from selenium.webdriver import DesiredCapabilities
+from selenium.webdriver.common.by import By
 
 from Browser.Actions.ChromeActions import ChromeActions
 from Browser.Actions.FirefoxActions import FirefoxActions
@@ -49,15 +51,21 @@ class BrowserBot:
 
     def start(self):
         driver = self.__browser_drivers.get(self.__driver_conf.get("executable_name"))
-        print("path", self.__driver_conf["executable_path"])
         self.driver = driver(**self.__getProfile(driver), executable_path=self.__driver_conf["executable_path"])
 
         self.driver.maximize_window()
 
-        print(f"[{self.driver.name}]: Launching agent")
+        print(f"[LAUNCHING_AGENT]: {self.driver.name}")
         self.action = self.__getActions(self.driver)
 
     def getConfig(self, config_name):
+        """
+            Get driver configuration
+            :param config_name: config_key
+            :return:
+        """
+        assert config_name in self.__driver_conf.keys()
+
         return self.__driver_conf.get(config_name)
 
     def release(self, clear_downloads: bool = False) -> None:
@@ -68,6 +76,10 @@ class BrowserBot:
         """
 
         if self.driver is not None:
+            while self.downloadsActive():
+                print(f"[RELEASE_DELAY::{self.__driver_conf['executable_name']}]: still downloading")
+                sleep(5)
+
             self.driver.quit()
             print(f"[RELEASING AGENT]: {self.__driver_conf['executable_name']}")
         if clear_downloads:
@@ -91,6 +103,13 @@ class BrowserBot:
 
         self.__downloads = dict(**self.__downloads, **val)
 
+    def downloadsActive(self) -> bool:
+        self.driver.get("chrome://downloads/")
+
+        manager = self.driver.find_element(By.TAG_NAME, "downloads-manager")
+        return any([text in manager.text.lower() for text in ["pause", "cancel"]])
+
+
     def __getProfile(self, driver: webdriver):
         """
         Fetch driver specific profile
@@ -110,7 +129,6 @@ class BrowserBot:
             ff_profile.set_preference("browser.download.manager.useWindow", False)
             ff_profile.set_preference("browser.download.manager.showAlertOnComplete", False)
             ff_profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/x-msdownload")
-
             ff_profile.binary = self.__driver_conf["binary"]
 
             profile["firefox_options"] = webdriver.FirefoxOptions()
@@ -125,6 +143,8 @@ class BrowserBot:
                 "download.directory_upgrade": True,
                 "download.default_directory": f'{Configuration.getBrowserConfiguration("download_path")}/'
             })
+            print(profile)
+            print(self.getConfig("download_path"))
         elif issubclass(driver, webdriver.Ie):
             profile = {"ie_options": webdriver.IeOptions()}
         print(profile)

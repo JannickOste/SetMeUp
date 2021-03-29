@@ -24,7 +24,7 @@ class Configuration:
                 if isinstance(v, dict):
                     obj[k] = replace_value(v, search_value, rep_value)
                 elif isinstance(v, str):
-                    obj[k] = v.replace(search_value, rep_value)
+                    obj[k] = v.replace(search_value, rep_value).replace(*("/", "\\" if platform == "win32" else ("/", "\\")) )
 
             return obj
 

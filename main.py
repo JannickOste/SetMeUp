@@ -1,4 +1,5 @@
 from sys import platform
+from time import sleep
 
 from Classes.Registry import Registry
 from Classes.Configuration import Configuration
@@ -6,18 +7,18 @@ from Browser.BrowserBot import BrowserBot
 
 
 extensionLib: dict = {
-    "firefox":
-    [
-        "https://addons.mozilla.org/en-US/firefox/addon/lastpass-password-manager/",
-        "https://addons.mozilla.org/en-US/firefox/addon/adblock-plus/",
-        "https://addons.mozilla.org/en-US/firefox/addon/popup-blocker-ultimate/"
-    ],
     "chrome":
     [
          "https://chrome.google.com/webstore/detail/lastpass-free-password-ma/hdokiejnpimakedhajhdlcegeplioahd?hl=en",
          "https://chrome.google.com/webstore/detail/adblock-plus-free-ad-bloc/cfhdojbkjhnklbpkdaibdccddilifddb?hl=en",
          "https://chrome.google.com/webstore/detail/pop-up-blocker-for-chrome/bkkbcggnhapdmkeljlodobbkopceiche?hl=en",
          "https://chrome.google.com/webstore/detail/darkify/lchabmjccahchaflojonfbepjbbnipfc"
+    ],
+    "firefox":
+    [
+        "https://addons.mozilla.org/en-US/firefox/addon/lastpass-password-manager/",
+        "https://addons.mozilla.org/en-US/firefox/addon/adblock-plus/",
+        "https://addons.mozilla.org/en-US/firefox/addon/popup-blocker-ultimate/"
     ]
 }
 
@@ -41,9 +42,6 @@ def downloadExtensions():
         if not exec_downloaded:
             browser.action.downloadExecutables(executables)
             exec_downloaded = True
-
-        browser.action.downloadAddons(extensionLib.get(agent))
-        browser.action.installAddons(addon_paths=list(browser.downloads.values()))
 
         browser.release()
 
