@@ -1,8 +1,11 @@
+import os
+from os.path import exists
 from sys import platform
 from typing import Union
 
 from Classes.Configuration import Configuration
 import subprocess
+import re
 
 
 class Registry:
@@ -73,10 +76,9 @@ class Registry:
 
         if program_name == "chrome" and not platform == "win32":
             program_name = "chromium"
-
+        print(program_name)
         loc = subprocess.getoutput(f"which {program_name}")
-        if len(loc.strip()) > 0:
-            return loc
+        return loc
 
     def getInstallLocation(self, program_name: str):
         """

@@ -1,0 +1,3 @@
+
+class BrowerNotSupported(Exception):
+    pass

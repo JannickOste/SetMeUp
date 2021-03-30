@@ -1,3 +1,4 @@
+import subprocess
 from sys import platform
 from os import system
 
@@ -7,6 +8,10 @@ class Shell:
     def kill(program_name: str):
         if platform == "win32":
             system(f"taskkill -f -im {program_name}")
+        elif platform == "linux":
+            pid = subprocess.getoutput(f"pgrep {program_name}")
+            if len(pid):
+                subprocess.call(f"pkill {pid}")
         else:
             raise Exception( f"Kill command for platform: {platform} not implemented")
 

@@ -15,7 +15,6 @@ class Configuration:
         Load JSON file: {__assetsPath} / {__config_name}
         """
         cls.__config = cls.__parseConfiguration()
-        print(cls.__config)
 
     @classmethod
     def __parseConfiguration(cls) -> dict:
@@ -24,15 +23,17 @@ class Configuration:
                 if isinstance(v, dict):
                     obj[k] = replace_value(v, search_value, rep_value)
                 elif isinstance(v, str):
-                    obj[k] = v.replace(search_value, rep_value).replace(*("/", "\\" if platform == "win32" else ("/", "\\")) )
+                    obj[k] = re.sub(r"/" if platform == "win32" else r"\\", r"\\" if platform == "win32" else r"/",
+                                    v.replace(search_value, rep_value))
 
             return obj
 
         root = json.loads(open(cls.getAssetPath([cls.__config_name]), "r").read())["configuration"]
-
         for search_key, replace_key in [("{ASSETS}", cls.getAssetPath())]:
             root.update(replace_value(root, search_key, replace_key))
 
+        root.update(json.loads(open(cls.getAssetPath(["Extensions.json"]), "r").read()))
+        print(root)
         return root
 
     @classmethod
@@ -59,6 +60,7 @@ class Configuration:
         :return: path to driver binary
         """
         driver_conf: dict = cls.__config.get("drivers")
+        print(driver_name)
         if driver_conf is not None:
             assert all([key in driver_conf.keys() for key in (["suffix", driver_name] if platform == "win32"
                                                               else [driver_name])])
@@ -95,3 +97,13 @@ class Configuration:
 
             result = browser_conf.get(config_key)
             return result if "{ASSETS}" not in result else result.format(ASSETS=cls.getAssetPath())
+
+    @classmethod
+    def getExtensions(cls, brower_name: str):
+        extension_conf: dict = cls.__config.get("extensions")
+        if extension_conf is not None:
+            if brower_name is None or not len(brower_name):
+                return extension_conf
+
+            assert brower_name in extension_conf.keys()
+            return extension_conf.get(brower_name)
